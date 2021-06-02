@@ -45,12 +45,11 @@ def welcome():
         f"/api/v1.0/precipitation<br/>"
         f"/api/v1.0/stations<br/>"
         f"/api/v1.0/tobs<br/>"
-        f"/api/v1.0/<start><br/>"
-        f"/api/v1.0/<start>/<end><br/>"
+        f"/api/v1.0/start<br/>"
+        f"/api/v1.0/start/end<br/>"
     )
 
 # JSON representation of dictionary Key:Date,Value:prcp
-
 
 @app.route("/api/v1.0/precipitation")
 def precipitation():
@@ -62,21 +61,11 @@ def precipitation():
         Measurement.date.between(year_ago_date, '2017-8-23')).all()
 
     session.close()
-    # Create a dictionary from the row data and append to a list of all_passengers
-    # last_year_data = []
-    # for date,prcp in prcp_last_12months:
-    #     prcp_dict = {}
-    #     prcp_dict["date"] = date
-    #     prcp_dict["prcp"] = prcp
-    #     last_year_data.append(prcp_dict)
-    # return jsonify(last_year_data)
-
     date_precipitation = {date: prcp for date, prcp in prcp_last_12months}
     return jsonify(date_precipitation)
 
+
 # Return a JSON list of stations from the dataset
-
-
 @app.route("/api/v1.0/stations")
 def stations():
     # Create our session (link) from Python to the DB
@@ -84,16 +73,15 @@ def stations():
 
     """Return a list of all station names"""
     # Query all station
-    all_stations = session.query(Station.station).all()
+    all_stations = session.query(Station.name).all()
     session.close()
 
     # Convert list of tuples into normal list
     station_list = list(np.ravel(all_stations))
     return jsonify(station_list)
 
-# Query the dates and temperature observations of the most active station for the last year of data.
-
-
+# Query the dates and temperature observations of the most active 
+# station for the last year of data.
 @app.route("/api/v1.0/tobs")
 def tobs():
     # Create our session (link) from Python to the DB
@@ -107,7 +95,7 @@ def tobs():
         order_by(func.count(Measurement.station).desc()).all()
     print(f'The most active station is: {station_desc_order[0][0]}')
     # The most active station is 'USC00519281'
-    
+
     # Query the last 12 months of temperature observation data for the most active station
     # latest_date = 2017, 8 ,23
     year_ago_date = dt.date(2017, 8, 23) - dt.timedelta(days=365)
@@ -117,30 +105,65 @@ def tobs():
     session.close()
     # Convert list of tuples into normal list
     tobs_list = list(np.ravel(station_tobs))
-    
+
     return jsonify(tobs_list)
 
 # Find min,max and avg temperature observation greater than the given start date
-# @app.route("/api/v1.0/<start>")
-# def start(start=None):
-#     # Create our session (link) from Python to the DB
-#     session = Session(engine)
+@app.route("/api/v1.0/<start>")
+def start(start):
+    print(start)
+    # Create our session (link) from Python to the DB
+    session = Session(engine)
 
-#     """Return a list of all station names"""
-#     # Query all station
+    """Return a list of all station names"""
+    # Query all station
 
-#     min_tobs = session.query(func.min(Measurement.tobs)).filter(
-#         Measurement.station == "USC00519281").scalar()
-#     max_tobs = session.query(func.max(Measurement.tobs)).filter(
-#         Measurement.station == "USC00519281").scalar()
-#     avg_tobs = session.query(func.avg(Measurement.tobs)).filter(
-#         Measurement.station == "USC00519281").scalar()
+    tobs_by_start_date = session.query(Measurement.station, Measurement.date, func.min(Measurement.tobs),func.max(Measurement.tobs),func.avg(Measurement.tobs)).\
+                                              group_by(Measurement.station).\
+                                                    filter(Measurement.date >= start).all()
+    
+    session.close()
 
-#     session.close()
+    # Create a dictionary from the row data and append to a list of temperature observation
+    temp_list=[]
+    for station, date, min,max,avg in tobs_by_start_date:
+        temp_dict={}
+        temp_dict["station"]=station
+        temp_dict["date"]=date
+        temp_dict["min"]=min
+        temp_dict["max"]=max
+        temp_dict["avg"]=avg
+        temp_list.append(temp_dict)
 
-#     return jsonify(min_tobs, max_tobs, avg_tobs)
+    return jsonify(temp_list)
 
 # Find min,max and avg temperature observation between the given start and end date
+@ app.route("/api/v1.0/<start>/<end>")
+def startend(start, end):
+
+    # Create our session (link) from Python to the DB
+    session=Session(engine)
+
+    """Return a list of all station names"""
+    # Query all station
+    tobs_start_end_date = session.query(Measurement.station, Measurement.date, func.min(Measurement.tobs),func.max(Measurement.tobs),func.avg(Measurement.tobs)).\
+                                              group_by(Measurement.station).\
+                                                    filter(Measurement.date.between(start, end)).all()
+
+    session.close()
+     # Create a dictionary from the row data and append to a list of temperature observation.
+    temp_list=[]
+    for station, date, min,max,avg in tobs_start_end_date:
+        temp_dict={}
+        temp_dict["station"]= station
+        temp_dict["date"]= date
+        temp_dict["min"]= min
+        temp_dict["max"]= max
+        temp_dict["avg"]= avg
+        temp_list.append(temp_dict)
+
+    return jsonify(temp_list)
+
 
 
 if __name__ == '__main__':
